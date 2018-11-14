@@ -1,0 +1,1234 @@
+---
+title: 'Guillermo Romera | Practicum2 | DA5030 | Intro to Data Mining/Machine Learning
+  | Term  Fall 2017 '
+output: html_notebook
+---
+Problem 1
+(0 pts) Download the data set Census Income Data for Adults along with its explanation. Note that the data file does not contain header names; you may wish to add those. The description of each column can be found in the data set explanation. 
+```{r}
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(e1071)
+library(readr)
+data1<- read.csv("http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data")
+
+
+col_names <- c("age", "workclass", "fnlwgt", "education", "education_num",
+               "marital_status", "occupation", "relationship", "race", "sex",
+               "capital_gain", "capital_loss", "hours_per_week", "native_country",
+               "income")
+names(data1) <- col_names
+
+#Since I'm pulling the data set out of the website this is a fail safe in case the web server goes down, yes, it happened to me once
+write.csv(data1, "filename.csv")
+```
+(0 pts) Explore the data set as you see fit and that allows you to get a sense of the data and get comfortable with it. Is there distributional skew in any of the features? Is there a need to apply a transform? 
+```{r}
+#The following plots will allows us to get a sense of the data we are working with
+library(plyr)
+library(psych)
+par(mfrow=c(2,3))
+d1 <- density(data1$age) 
+plot(d1) 
+d <- density(data1$fnlwgt) 
+plot(d)
+d <- density(data1$education_num) 
+plot(d) 
+d <- density(data1$capital_gain) 
+plot(d) 
+d <- density(data1$capital_loss) 
+plot(d) 
+d <- density(data1$hours_per_week) 
+plot(d)
+#As we can see fnlwgt, capital gain and capital loss are very skewed features, the age is somewhat close to the normal distribution but a little bit skewed to the left.
+#I don't think there's any need to apply a transformation since we are not using these features for our analysis
+
+#Also this five graphs allows us to se the distribution in a different manner
+#We can infer from this graphs that capital value and capital gain has a lot of 0 values comprares to values >0 and that's is what is skewing the data in those features
+par(mfrow=c(2,3))
+x1 <- data1$age
+h<-hist(x1, breaks=10, col="green", xlab="age", 
+  	main="Histogram with Overlay Curve",xlim = c(0,100) )
+xfit<-seq(min(x1),max(x1),length=40) 
+
+x2 <- data1$fnlwgt
+h<-hist(x2, breaks=10, col="green", xlab="fnlwgt", 
+  	main="Histogram with Overlay Curve")
+xfit<-seq(min(x2),max(x2),length=40) 
+
+x3 <- data1$education_num
+h<-hist(x3, breaks=10, col="green", xlab="education", 
+  	main="Histogram with Overlay Curve",xlim = c(0,100) )
+xfit<-seq(min(x3),max(x3),length=40) 
+
+x4 <- data1$capital_gain
+h<-hist(x4, breaks=10, col="green", xlab="capital gain", 
+  	main="Histogram with Overlay Curve")
+xfit<-seq(min(x4),max(x4),length=40) 
+
+x5 <- data1$capital_loss
+h<-hist(x5, breaks=10, col="green", xlab="capital loss", 
+  	main="Histogram with Overlay Curve")
+xfit<-seq(min(x5),max(x5),length=40) 
+
+
+```
+
+```{r}
+library(gridExtra)
+library(cowplot)
+library(ggplot2)
+
+
+#This plot allows us too see the frequency of the nationality in our data set and as we cann see in the graph most of them are from United States and that big the difference that we can barely see other countries.
+ggplot(data1, aes("native_country", ..count..)) + geom_bar(aes(fill = data1$native_country), position = "dodge")+
+  theme(legend.text=element_text(size=7))
+
+#These two plots allows us to see which are the reigning classes for the feature of workclass and education
+#We can see that for workclass the private sector is the more populated and for education HS-Grad
+p1<-ggplot(data1, aes("workclass", ..count..)) + geom_bar(aes(fill = data1$workclass), position = "dodge")
+p2<-ggplot(data1, aes("education", ..count..)) + geom_bar(aes(fill = data1$education), position = "dodge")
+grid.arrange(p1, p2, ncol=2)
+
+#Another two plots, this time to see the reigning marital status and the occupation.
+#The most common marital status is Married-civ-spouse and the most common opccupation Prof-specialty
+p3<-ggplot(data1, aes("marital_status", ..count..)) + geom_bar(aes(fill = data1$marital_status), position = "dodge")
+p4<-ggplot(data1, aes("occupation", ..count..)) + geom_bar(aes(fill = data1$occupation), position = "dodge")
+grid.arrange(p3, p4, ncol=2)
+
+#Two plots more to see the most common category for relationship and race, being these Husband and White respectively
+p5<-ggplot(data1, aes("relationship", ..count..)) + geom_bar(aes(fill = data1$relationship), position = "dodge")
+p6<-ggplot(data1, aes("race", ..count..)) + geom_bar(aes(fill = data1$race), position = "dodge")
+grid.arrange(p5, p6, ncol=2)
+
+#Now to get a deeper sense of the data, in this two plots we can see that there's more males thant females in our data set the secon plot, on the right we can see that people who earns <=50k is way more common than those making >50k
+p7<-ggplot(data1, aes("sex", ..count..)) + geom_bar(aes(fill = data1$sex), position = "dodge")
+p8<-ggplot(data1, aes("income", ..count..)) + geom_bar(aes(fill = data1$income), position = "dodge")
+grid.arrange(p7, p8, ncol=2)
+
+#In this graph we can see the frequency of people who earn either <=50k or >50k based on their workclass
+dat <- data.frame(table(data1$workclass,data1$income))
+names(dat) <- c("workclass","income","Count")
+ggplot(data=dat, aes(x=workclass, y=Count, fill=income)) + geom_bar(stat="identity")+theme(text = element_text(size=20),
+        axis.text.x = element_text(angle=90, hjust=1)) 
+
+#This allows us two see how many "?" are in the whole data set, because eventually they will be treated as NAs and it will require some data imputation
+nrow(data1[data1$workclass %in% " ?" ,])
+nrow(data1[data1$occupation %in% " ?" ,])
+nrow(data1[data1$native_country %in% " ?" ,])
+
+```
+
+
+
+
+(10 pts) Create a frequency and then a likelihood table for the categorical features in the data set. Build your own Naive Bayes classifier for those features.
+```{r}
+
+data1<- read.csv("http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data")
+
+
+col_names <- c("age", "workclass", "fnlwgt", "education", "education_num",
+               "marital_status", "occupation", "relationship", "race", "sex",
+               "capital_gain", "capital_loss", "hours_per_week", "native_country",
+               "income")
+
+names(data1) <- col_names
+
+#############  TINKERING WITH MISSING DATA
+
+#This allows us two see how many "?" are in the whole data set
+nrow(data1[data1$workclass %in% " ?" ,])
+nrow(data1[data1$occupation %in% " ?" ,])
+nrow(data1[data1$native_country %in% " ?" ,])
+
+#This converts "?" into NAs
+data1$workclass[data1$workclass == " ?"] <- NA 
+data1$occupation[data1$occupation == " ?"] <- NA 
+data1$native_country[data1$native_country == " ?"] <- NA 
+
+#Double checking everything has been done properly so far
+nrow(data1[data1$workclass %in% " ?" ,])
+nrow(data1[data1$occupation %in% " ?" ,])
+nrow(data1[data1$native_country %in% " ?" ,])
+
+#This allows us two see how many NAs are in the whole data set
+nrow(data1[data1$workclass %in% NA,])
+nrow(data1[data1$occupation %in% NA ,])
+nrow(data1[data1$native_country %in% NA ,])
+
+#This will get rid of the factor level that the object "?" was causing
+data1$workclass = droplevels(data1$workclass)
+data1$occupation = droplevels(data1$occupation)
+data1$native_country = droplevels(data1$native_country)
+
+############### IMPUTING DATA BY MODE ############
+
+#Although I have not imputed the data this way I decided to keep this in here as a fail safe
+
+library(VIM)
+v1<-cbind.data.frame(data1$workclass,data1$occupation,data1$native_country)
+names(v1) <- c("workclass","occupation","nativecountry")
+
+#This graph that I discovered allows us to see the percent of missing values over the total of the data
+mice_plot <- aggr(v1, col=c('orange','yellow'),
+                    numbers=TRUE, sortVars=TRUE,
+                    labels=names(v1), cex.axis=0.75,cex.lab=1,cex.numbers=0.75,
+                    gap=3, ylab=c("Missing data","Pattern"))
+
+mode <- function(x) {
+m1 <- unique(x)
+m1[which.max ( tabulate ( match(x, m1)))]
+}
+mode ( v1$workclass)
+
+v1$workclass[is.na(v1$workclass)]<- mode ( v1$workclass)
+v1$occupation[is.na(v1$occupation)]<- mode ( v1$occupation)
+v1$nativecountry[is.na(v1$nativecountry)]<- mode ( v1$nativecountry)
+
+############### IMPUTING DATA BY DECISION TREE ############
+
+#As mentioned in the lessons an all over the internet for this type of data the best imputation method is by a decision tree and although I tried to use the packages [missforest] and [Hmisc] that apparently are the best ones to impute the type of data we are dealing with unfortunately I haven't been able to figure out how to make it work.
+
+#However I will try Sunday morning to make it work one last time.
+
+##### WORKCLASS
+library (rpart)
+
+#This let us see which rows has NAs for the workclass column
+NAs <- which(is.na(data1$workclass))
+
+#We run a decision tree model
+m1<- rpart(workclass ~ age+education_num+hours_per_week +education_num, data = 
+                data1[-NAs,], control =
+                rpart.control(minsplit=2, cp=0.01))
+
+#Then we predict those values with the model created above
+pred <- predict(m1, newdata = data1[NAs,], type = "class")
+
+#And last we impute those predicted values where the NAs are in the workclass column
+data1$workclass[NAs] <- pred
+
+
+##### OCCUPATION
+
+#This let us see which rows has NAs for the occupation column
+NAs <- which(is.na(data1$occupation))
+
+#We run a decision tree model
+m2<- rpart(occupation ~ age+education_num+hours_per_week +education_num, data = 
+                data1[-NAs,], control =
+                rpart.control(minsplit=2, cp=0.01))
+
+#Then we predict those values with the model created above
+pred2 <- predict(m2, newdata = data1[NAs,], type = "class")
+
+#And last we impute those predicted values where the NAs are in the occupation column
+data1$occupation[NAs] <- pred2
+
+##### NATIVE COUNTRY
+
+#This let us see which rows has NAs for the occupation column
+NAs <- which(is.na(data1$native_country))
+
+#We run a decision tree model
+m3<- rpart(native_country ~ age+education_num+hours_per_week +education_num, data = 
+                data1[-NAs,], control =
+                rpart.control(minsplit=2, cp=0.01))
+
+#Then we predict those values with the model created above
+pred3 <- predict(m3, newdata = data1[NAs,], type = "class")
+
+#And last we impute those predicted values where the NAs are in the native country column
+data1$native_country[NAs] <- pred3
+
+#checking fi the data imputation has worked
+nrow(data1[data1$workclass %in% NA,])
+nrow(data1[data1$occupation %in% NA ,])
+nrow(data1[data1$native_country %in% NA ,])
+
+##FREQUENCY TABLE
+library(gmodels)
+library(dplyr)
+library(plyr)
+
+#This let us see how manny times every single combination of every single feature has occured in the data frame
+t = count(data1, c("sex","education", "workclass", "education","marital_status", "occupation", "relationship", "race","native_country","income"))
+freq1<-data.frame(t)
+freq1$total<-sum(freq1$freq) 
+head(freq1) 
+
+ 
+##LIKELIHOOD TABLE
+
+#This gives as it name says the likelijood of that event happening 
+likelihood<-prop.table(freq1$freq)
+
+likelihoodt<-cbind.data.frame(freq1,likelihood)
+head(likelihoodt)
+##
+    
+  
+### NAIVE BAYES CLASSIFIER
+  
+data3<-cbind.data.frame(data1[2],data1[4],data1[6],data1[7],data1[8],data1[9],data1[10],data1[14],data1[15])
+ 
+mNB <- function(target, data, laplace) {
+ #We split the training data into two different categories, target class and attribute
+n <- nrow(data)
+y <- data[  , target]
+incomes <- levels(y)
+k <- length(incomes)
+att.names <- setdiff(colnames(data), target)
+atts <- data[ , att.names]
+  
+#these new variables will be imputed with the data obtained above
+priors <- setNames(numeric(k), incomes)
+probs <- vector("list", k)
+
+#We loop over all the possible incomes
+for(inc in incomes) {
+#Subset by outcome
+atts2 <- atts[y == inc, ]
+
+#We get the appriori probabilities for both incomes
+priors[inc] <- nrow(atts2) / n
+#Here we incorporate the laplace smoothing, that will be needed later on
+probs[[inc]] <- lapply(atts2, function(x) {
+p <- table(x)
+p <- p + laplace
+p <- prop.table(p)
+p <- setNames(as.numeric(p), names(p))
+    })
+  }
+  #These are the components of the model for Naive Bayes
+  list(target = target, incomes = incomes, priors = priors, probs = probs)
+}
+
+pNB <- function(model, newdata) {
+n <- nrow(newdata)
+#We remove the labes of the data, if it's labelled
+newdata[ , model$target] = NULL
+income <- model$incomes
+#The results will be filled in the next variable
+pred <- matrix(NA, nrow = n, ncol = length(income))
+colnames(pred) <- income
+#We loop through the new data set or in this case the test data
+for(i in 1:nrow(newdata)) {
+#We set the attributes as characters
+x <- sapply(newdata[i , ], as.character)
+#We loop trhough the income to look up for conditional probabilites
+    for(inc in income) {
+tabs <- model$probs[[inc]]
+#We take those probabilities for each income type and save them in a new variable
+newprobs <- sapply(names(x), function(n) { tabs[[n]][x[n]] } )
+#We multiply the conditional and apriori probabilities to get the Naive Bayes prediction
+pred[i, inc] <- prod(newprobs, na.rm = T) * model$priors[[inc]]
+    }
+  }
+  #we get the classified incomes
+  classified <<- colnames(pred)[max.col(pred)]
+}
+
+#We split the data into two equal halves
+data_train<-data3[1:16280, ]
+data_test<-data3[16281:32560, ]
+
+#We run the naive bayes model on the train data
+NBmodel <- mNB("income", data_train, 1)
+#We make the predictionfor the test data
+NBpred <- pNB(NBmodel, data_test)
+
+#A table to visually see how they have been classified  
+t <- table(classified, data_test$income)
+t
+acc <- (t[1 , 1] + t[2 , 2]) / nrow(data_test)
+acc <- round(acc * 100, 1)
+acc
+  
+#These two lines let us see the frequency of the two incomes tha twe have in total in teh test data set
+nrow(data_test[data_test$income %in% " <=50K" ,])
+nrow(data_test[data_test$income %in% " >50K" ,])
+```
+(20 pts)Predict the binomial class membership for a white male adult who is a federal government worker with a bachelors degree who immigrated from Ireland. Ignore any other features in your model. You must build your own Naive Bayes Classifier -- you may not use a package.
+```{r}
+#These plots below let us see the distribution of the income between the main attributes that we need to predict for the new case
+#We can infer that for the most part a person who's a federal goverment worker with a bachelors degree and while male as higher probabilities of having an income of <=50K than >50K
+
+#For some reason this plot might not display properly sometimes, I haven't been able to figure out what is causing it
+dat <- data.frame(table(data1$workclass,data1$income))
+names(dat) <- c("workclass","income","Count")
+v1<-subset(dat[2, ])
+v2<-subset(dat[11, ])
+v3<-rbind.data.frame(v1,v2)
+p1<-ggplot(data=v3, aes(x=workclass, y=Count, fill=income)) + geom_bar(stat="identity")
+
+dat <- data.frame(table(data1$race,data1$income))
+names(dat) <- c("race","income","Count")
+v1<-subset(dat[5, ])
+v2<-subset(dat[10, ])
+v3<-rbind.data.frame(v1,v2)
+p2<-ggplot(data=v3, aes(x=race, y=Count, fill=income)) + geom_bar(stat="identity")
+
+
+dat <- data.frame(table(data1$education, data1$income))
+names(dat) <- c("education","income","Count")
+v1<-subset(dat[10, ])
+v2<-subset(dat[26, ])
+v3<-rbind.data.frame(v1,v2)
+p3<-ggplot(data=v3, aes(x=education, y=Count, fill=income)) + geom_bar(stat="identity")
+
+
+dat <- data.frame(table(data1$sex, data1$income))
+names(dat) <- c("sex","income","Count")
+v1<-subset(dat[2, ])
+v2<-subset(dat[4, ])
+v3<-rbind.data.frame(v1,v2)
+p4<-ggplot(data=v3, aes(x=sex, y=Count, fill=income)) + geom_bar(stat="identity")
+
+grid.arrange(p1,p2,p3,p4 ,ncol=2)
+
+
+data1_test <- rbind.data.frame(c("Federal_gov","Bachelors","White","Male", "Ireland"))
+names(data1_test) <- c("workclass","education","race","sex","native_country")
+
+data_train<-data3
+
+NBmodel <- mNB("income", data_train, 1)
+NBpred  <- pNB(NBmodel, data1_test)
+
+#As expected the prediction tell us that person will have an income of <=50K  
+NBpred 
+
+```
+(10 pts) Perform 10-fold cross validation on your algorithm to tune it and report the final accuracy results.
+
+```{r}
+
+
+accs <- rep(0,10)
+
+for (i in 1:10) {
+  #These indices below indicate it's a 10-fold cross validation
+indices <- (((i-1) * round((1/10)*nrow(data3))) + 1):((i*round((1/10) * nrow(data3))))
+  
+#We exckude the indices above from the train set 
+train <- data3[-indices,]
+  
+#And now we incldue them into the test set
+test <- data3[indices,]
+  
+#These line will use the model naive bayes classifier for each training set
+tree <- mNB("income", data_train, 1)
+  
+#And this one will make a prediction for each test test
+pred <- pNB(tree, test)
+  
+#we save the coinfusion matrix in a variable to help us below get the accuracy
+conf <- table(test$income, pred)
+  
+#This will assign the accuracy to each indexes of the accs above
+accs[i] <- sum(diag(conf))/sum(conf)
+}
+
+accs
+
+
+
+```
+
+
+Problem 2
+After reading the case study background information, using the UFFI data set, answer these questions:
+(10 pts) Are there outliers in the data set? If so, what is the appropriate action and how are they discovered?
+```{r}
+
+library(readxl)
+library(lattice)
+library(gclus)
+library(qqplotr)
+library(ggplot2)
+library(graphics)
+library(caret)
+library(calibrate)
+library(mvoutlier)
+uffi<- read_excel("D:/R_TEst/MAchine Learning 2017/Practicum2/uffidata (1).xlsx")
+
+uffi<-uffi[1:99,]
+
+#In this first three plots we can notice that all these columns have a decent amount of outliers
+#Further analysis will be done but for starters this visual representation will help building the foundation of what is coming next
+par(mfrow=c(2,3))
+boxplot(uffi$`Sale Price`)
+boxplot(uffi$`Lot Area`)
+boxplot(uffi$`Living Area_SF`)
+
+#In this secondthree plots we can confirm that indeed these columns have some extreme outliers that are oustanding from the rest
+par(mfrow=c(1,3))
+plot(uffi$`Sale Price`)
+plot(uffi$`Lot Area`)
+plot(uffi$`Living Area_SF`)
+
+#Again another three more plots to visualize the distribution of these outliers.
+#By know we can have some sort of idea where these outleirs are located and how they are
+par(mfrow=c(1,3))
+x <- uffi$`Sale Price`
+h<-hist(x, breaks=10, col="green", xlab="Sales Price",
+        main="Histogram for the Sales Price")
+
+x <- uffi$`Lot Area`
+h<-hist(x, breaks=10, col="green", xlab="Lot Area",
+        main="Histogram for the Lot Area")
+
+x <- uffi$`Living Area_SF`
+h<-hist(x, breaks=10, col="green", xlab="Living Area",
+        main="Histogram for the Living Area")
+
+##OUTLIERS SALE PRICE##
+#These are the extreme outliers for the column Sale Price, and although we need a multivariate approach for the detection of these outliers we clearly see that these three will be there nonetheless
+z<-(mean(uffi$`Sale Price`)-uffi$`Sale Price`)/sd(uffi$`Sale Price`)
+z
+z<-abs(z)
+mean(z)
+outliers1<-z[which(z>3)]
+outliers1
+outliers2<-which(z>3)
+outliers2
+uffi$`Sale Price`[outliers2]
+uffi2<-subset.data.frame(uffi, z>3)
+uffi2
+
+##OUTLIERS LOT AREA##
+#This column has proved tougher that then rest. While raising the 3sd away from the mean did not give me any values at all I decided to lower the bar to 2.5 to see if there where any patterns to it as you can see some values are repeating again and  new values show up
+z2<-(mean(uffi$`Lot Area`)-uffi$`Lot Area`)/sd(uffi$`Lot Area`)
+z2
+z2<-abs(z2)
+mean(z2)
+outliers1<-z2[which(z2>2.5)]
+outliers1
+outliers2<-which(z2>2.5)
+outliers2
+uffi$`Lot Area`[outliers2]
+uffi3<-subset.data.frame(uffi, z2>2.5)
+uffi3
+
+##OUTLIERS LIVING AREA
+#This outliers are the same as for the Sales Price so it helps us to get some understanding of the outliers in our data set.
+z3<-(mean(uffi$`Living Area_SF`)-uffi$`Living Area_SF`)/sd(uffi$`Living Area_SF`)
+z3
+z3<-abs(z3)
+mean(z3)
+outliers1<-z3[which(z3>3)]
+outliers1
+outliers2<-which(z3>3)
+outliers2
+uffi$`Living Area_SF`[outliers2]
+uffi4<-subset.data.frame(uffi, z3>3)
+uffi4
+
+#It seems that the correlation between the Sales Price and the Lot area is not very strong
+cor(uffi$`Sale Price`,uffi$`Lot Area`)
+plot(uffi$`Lot Area`,uffi$`Sale Price`)
+
+#On the other hand the correlation between the Sales Price and the Living Area has a rather strong correlation
+cor(uffi$`Sale Price`,uffi$`Living Area_SF`)
+plot(uffi$`Living Area_SF`,uffi$`Sale Price`)
+
+#Conclusions so far :
+#Sales Price and Living Area have clear outliers that are 3 sd away from the mean, and thus I have placed them in the category of extreme outliers for now
+#On the other hand outliers by Lot Area seems a bit tougher to figure out since it has a low correlation with the other two variables and there's not clear pattern to it
+#As I already know after working with the data, Lot Area will prove difficult to understand and classify and as I already worked to figure it out has made me bang my head against the wall a few times
+
+
+#################################################### DETECTING OULIERS BY COOKS DISTANCE
+
+mod1 <- lm(uffi$`Sale Price` ~ uffi$`Living Area_SF`, data=uffi)
+cooksd1 <- cooks.distance(mod1)
+
+mod2 <- lm(uffi$`Sale Price` ~ uffi$`Lot Area`, data=uffi)
+cooksd2 <- cooks.distance(mod2)
+
+mod3 <- lm(uffi$`Sale Price` ~ uffi$`Living Area_SF`+ uffi$`Lot Area` , data=uffi)
+cooksd3 <- cooks.distance(mod3)
+
+
+mod4 <- lm(uffi$`Sale Price` ~ +uffi$`Year Sold` +uffi$`UFFI IN` +uffi$`Brick Ext` +uffi$`45 Yrs+` +uffi$`Bsmnt Fin_SF` +uffi$`Lot Area` +uffi$`Enc Pk Spaces` +uffi$`Living Area_SF` +uffi$`Central Air` +uffi$Pool,  data=uffi)
+cooksd4 <- cooks.distance(mod4)
+
+par(mfrow=c(1,2))
+plot(cooksd1, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 4*mean(cooksd1, na.rm=T), col="red")  # add cutoff line
+text(x=1:length(cooksd1)+1, y=cooksd1, labels=ifelse(cooksd1>4*mean(cooksd1, na.rm=T),names(cooksd1),""), col="red")  # add labels
+
+
+plot(cooksd2, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 4*mean(cooksd2, na.rm=T), col="red")  # add cutoff line
+text(x=1:length(cooksd2)+1, y=cooksd2, labels=ifelse(cooksd2>4*mean(cooksd2, na.rm=T),names(cooksd2),""), col="red")  # add labels
+
+par(mfrow=c(1,2))
+plot(cooksd3, pch="*", cex=2, main="Influential Obs by Cooks distance")  
+abline(h = 4*mean(cooksd3, na.rm=T), col="red")  
+text(x=1:length(cooksd3)+1, y=cooksd3, labels=ifelse(cooksd3>4*mean(cooksd3, na.rm=T),names(cooksd3),""), col="red")  
+
+plot(cooksd4, pch="*", cex=2, main="Influential Obs by Cooks distance") 
+abline(h = 4*mean(cooksd4, na.rm=T), col="red") 
+text(x=1:length(cooksd4)+1, y=cooksd4, labels=ifelse(cooksd4>4*mean(cooksd4, na.rm=T),names(cooksd4),""), col="blue")  
+
+#A little bit redundant to do a regression model to detect outliers to clear them up to then do another optimized regression model but apparently Cook's distance is a good way to detect outliers
+#Now this is messing a little bit more with our values
+#Again we have clear contender for outliers such as the row 97 (this is no doubt an extreme outlier),95,99 but new ones have appeared such as row 59 (Observation 93).
+#Now after some look at the data I believe I understand why row 59(observation 93) is showing up.
+#Given it's attributes seems that there's nothing outstanding about that observation, but  taking a look at the data sorted by year we can see that it has something the houses from that year have and that is a pool that why it's making this observation an outlier
+
+#Conclusion:
+#This is proving more difficult than expected and at this point I know it will all come down to my criteria
+#At least we have some clear outliers, Row 97 is an extreme one. Row 99 shows up all the time too, although not as extreme as Row 97
+
+
+##################### OUTLIER DETECTION BY PCA ANALYSIS
+
+#By now I have somewhat an idea of who the outliers are, but I wanted to keep going into my analysis just to make sure I'm not in the wrong and I can justify my decision more clearly
+
+#The next approach I have tried to detect outliers is by PCA or Principal Component Analysis
+#This analysis will further help my conclusions and although I'm still trying to understand what PCA does plotting graphs has helped significantly
+
+
+uffi<- read_excel("D:/R_TEst/MAchine Learning 2017/Practicum2/uffidata (1).xlsx")
+
+uffi<-uffi[1:99,]
+
+uffi2<- cbind.data.frame(uffi$`Sale Price`,uffi$`Lot Area`,uffi$`Living Area_SF`)
+# Look at the correlations
+
+col_names <- c("price","lotarea","livingarea")
+names(uffi2) <- col_names
+library(lattice)
+library(gclus)
+my.abs     <- abs(cor(uffi2))
+my.colors  <- dmat.color(my.abs)
+my.ordered <- order.single(cor(uffi2))
+cpairs(uffi2, my.ordered, panel.colors=my.colors, gap=0.5)
+
+my.prc <- prcomp(uffi2, center=TRUE, scale=TRUE)
+
+biplot(my.prc, cex=c(1, 0.7))
+
+#Conclusions:
+#The bloxplot of the PCA has helped a lot, now we have a better understanding of where these outliers are
+#Rows 99,98,97,96,95,84,77,52 are all outliers, but mind that some are more extreme than others.
+#For now my idea is to eliminate the most common outliers ie: the ones who show up all the time.
+
+
+#################### OUTLIER DETECTION BY PCA ANALYSIS(2)
+
+#In this PCA analysis I'll take a look at the scores and see what rows are outliers out of the whole data frame based on the IQR
+
+library(qqplotr)
+library(ggplot2)
+library(graphics)
+library(caret)
+pca <- prcomp(uffi2) 
+
+identify(qqnorm(pca$x[,2],pch = 20, col = c(rep("red", 33), rep("blue", 99))))
+
+pr <- prcomp(uffi2,center = TRUE, scale. = TRUE)
+
+transformedData <- predict(preProcess(uffi2,method = c("center","scale")),uffi2)
+mu <- colMeans(transformedData)
+
+distFromMu <- sweep(transformedData,2,mu,'-')
+distFromMu <- abs(distFromMu)
+
+lam <- apply(pr$x,2,var)
+
+nominator <- (as.matrix(distFromMu)%*%as.matrix(pr$rotation))**2
+
+Res <- sweep(nominator,2,lam,'/')
+
+scores <- rowSums(Res)
+
+par(mfrow=c(1,2));
+
+hist(scores,breaks = 10000,xlim=c(0,50))
+
+boxplot(scores,horizontal = TRUE)
+
+maxScore = which.max(scores)
+uffi2[maxScore,]
+scores
+
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
+}
+
+v1<-is_outlier(scores)
+v1
+v2<-which(v1==TRUE)
+v2
+
+
+#################### OUTLIER DETECTION BASED ON LESSONS VIDEOS
+
+library(readxl)
+library(readxl)
+uffi<- read_excel("D:/R_TEst/MAchine Learning 2017/Practicum2/uffidata (1).xlsx")
+
+uffi<-uffi[1:99,]
+
+uffi2<- cbind.data.frame(uffi$`Sale Price`,uffi$`Lot Area`,uffi$`Living Area_SF`)
+# Look at the correlations
+
+col_names <- c("price","lotarea","livingarea")
+names(uffi2) <- col_names
+
+library(calibrate)
+library(mvoutlier)
+v1<-uni.plot(uffi2,symb = TRUE)
+v2<-which(v1$outliers==TRUE)
+v2
+is_outlier(v1$euclidean)
+###################### OVERALL CONCLUSIONS
+
+
+#We have seen so far that for all the analysis there are some number of rows that repeat multiple times
+#For the most part these numbers are Rows: 77 84 95 96 97 98 99
+#Which also confirm the initial analysis of outliers column by column
+#Now what should we do with the outliers?
+#Well that's a very complicated question, since we have used PCA we know that these outliers interfere a lot with the data and thus they can't be used with the values they have as of now
+#Given the analysis and the data obtained from it I have decided I will drop the most "extreme" values
+#Those being Rows: 99,98,97,96,95,84 and 77
+
+library(readxl)
+library(readxl)
+uffi<- read_excel("D:/R_TEst/MAchine Learning 2017/Practicum2/uffidata (1).xlsx")
+
+
+uffi2<-uffi[1:76,]
+uffi3<-uffi[78:83,]
+uffi4<-uffi[85:94,]
+
+uffiF<-rbind.data.frame(uffi2,uffi3,uffi4)
+col_names <- c("observation","year", "price","UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(uffiF) <- col_names
+
+```
+
+
+(5 pts) Using visual analysis of the sales price with a histogram, is the data normally distributed and thus amenable to parametric statistical analysis? What are the correlations to the response variable and are there collinearities?
+
+
+```{r}
+library(psych)
+par(mfrow=c(1,2))
+######## WITH OUTLIERS
+x <- uffi$`Sale Price`
+h<-hist(x, breaks=10, col="green", xlab="Sales Price",
+        main="Histogram for Sales with Outliers")
+
+######## WITHOUT OUTLIERS
+x1 <- uffiF$price
+h<-hist(x1, breaks=10, col="green", xlab="Sales Price",
+        main="Histogram for Sales without Outliers", xlim= c(50000,200000))
+
+
+######## WITHOUT OUTLIERS
+pairs.panels(uffiF[c("year","UFFI","brick","45years","lotarea","price")])
+pairs.panels(uffiF[c("pkspace","livingarea","air","pool","price")])
+pairs.panels(uffiF[c("pkspace","air","UFFI","livingarea","brick","air")])
+pairs.panels(uffiF[c("45years","pool","lotarea")])
+#As I pointed out before there is colinearity between the price and the lvinig area, although it has been reduced due to the treatment of outliers.There's also collinearity between the parking space and the price but not very strong.Also the year sold and the price has a very strong correlation as well as the price and the lot area, but again #not really strong as I pointed out before
+
+#About the collinearity, the birck exterior and the year sold has certain collinearity although really small (0.20) and also the lot area and the year (0.24)
+#Living area and parkspace shows a small amount of colinearity
+```
+It might seem as if I deleted enough outliers the we would have a normal distribution, but with the way I have deleted the outliers no, we do not have a normal distribution thus the data is not amenable to parametric statistical analysis.
+
+(2 pts) Is the presence or absence of UFFI alone enough to predict the value of a residential property?
+
+```{r}
+######## WITH OUTLIERS
+par(mfrow=c(2,2))
+plot(uffi$`UFFI IN`,uffi$`Sale Price`)
+plot(uffi$`Sale Price`,uffi$`UFFI IN`)
+
+######## WITHOUT OUTLIERS
+plot(uffiF$UFFI,uffiF$price)
+plot(uffiF$price,uffiF$UFFI)   
+
+```
+
+While it seems UFFI IN has some impact in the price or value of a residential property I don't think it's good enough to predict it all alone. If we look at the plot we can indeed see that the prices follow a trend, those houses with UFFI IN of 1 has a lower price range that those with a UFFI IN of 0,s whilst it may help uf on the prediction it won't be enough alone.
+
+(4 pts) Is UFFI a significant predictor variable of selling price when taken with the full set of variables available?
+
+```{r}
+######## WITH OUTLIERS
+m1<-lm(`Sale Price`~., data=uffi)
+summary(m1)
+
+######## WITHOUT OUTLIERS
+m1<-lm(price~., data=uffiF)
+summary(m1)
+
+```
+Taking a look at a baisc multiple regression model, no it seems as if UFFI IN is not significant enough as a predictor variable with all the variables taken into account with the data with the outliers.
+
+But interesting enough after I have removed my outliers it seems that UFFI was almost a significant predictor variable, although it does stay out of the 0.05 threshold thus making it not significant enough
+
+(15 pts) What is the ideal multiple regression model for predicting home prices in this data set? Provide a detailed analysis of the model, including Adjusted R-Squared, RMSE, and p-values of principal components. Use backfitting to build the model.
+
+```{r}
+
+
+library(readxl)
+library(MASS)
+uffi<- read_excel("D:/R_TEst/MAchine Learning 2017/Practicum2/uffidata (1).xlsx")
+uffi2<-uffi[1:76,]
+uffi3<-uffi[78:83,]
+uffi4<-uffi[85:94,]
+uffiF<-rbind.data.frame(uffi2,uffi3,uffi4)
+col_names <- c("observation","year", "price","UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(uffiF) <- col_names
+uffiF<-uffiF[,-1]
+
+summary(lm(price~ +UFFI +brick +`45years` +bsmnt +lotarea +pkspace +livingarea +air +pool ,data=uffiF))
+v1<-lm(price~.,data=uffiF)
+step(v1)
+v2<-lm(price~ +year +UFFI +bsmnt +pkspace +livingarea +pool,data=uffiF)
+summary(v2)
+
+########## GOOD MODELS
+
+###FIRST MODEL
+v3<-lm(price~ +year +bsmnt +pkspace +livingarea +pool,data=uffiF)
+summary(v3)
+
+v31<-summary(v3)$r.squared
+v31
+v32<-summary(v3)$adj.r.squared
+v32
+
+RSS <- c(crossprod(v3$residuals))
+MSE <- RSS / length(v3$residuals)
+RMSE3 <- sqrt(MSE)
+RMSE3
+
+
+###SECOND MODEL
+v4<-lm(price~ +year +bsmnt +pkspace +livingarea ,data=uffiF)
+summary(v4)
+
+v41<-summary(v4)$r.squared
+v41
+v42<-summary(v4)$adj.r.squared
+v42
+
+RSS <- c(crossprod(v4$residuals))
+MSE <- RSS / length(v4$residuals)
+RMSE4<- sqrt(MSE)
+RMSE4
+
+
+#Model Based on P-value ###THIRD MODEL
+v5<-lm(price~ +year +bsmnt +livingarea +UFFI ,data=uffiF)
+summary(v5)
+
+v51<-summary(v5)$r.squared
+v51
+v52<-summary(v5)$adj.r.squared
+v52
+
+RSS <- c(crossprod(v5$residuals))
+MSE <- RSS / length(v5$residuals)
+RMSE5 <- sqrt(MSE)
+RMSE5 
+
+model<- c(3,4,5)
+lmod3<- cbind.data.frame(v31,v32,RMSE3)
+col_names <- c("Rsquared", "adjrsq","RMSE")
+names(lmod3) <- col_names
+lmod4<- cbind.data.frame(v41,v42,RMSE4)
+col_names <- c("Rsquared", "adjrsq","RMSE")
+names(lmod4) <- col_names
+lmod5<- cbind.data.frame(v51,v52,RMSE5)
+col_names <- c("Rsquared", "adjrsq","RMSE")
+names(lmod5) <- col_names
+lmodels<-rbind.data.frame(lmod3,lmod4,lmod5)
+
+#Here we can see more easily what the values for the rsquared adj rsquared and the RMSE are we can initially see that we have a model that performs better that then rest and that one is the regression model V3 since it has the lowest RMSE and the lowest adjusted r squared
+lmodels1<-cbind.data.frame(model,lmodels)
+lmodels1
+
+#Now getting into further analysis and running an anova test to compare the models it seems that the model 3 indeed it's the better option, as the anova test shows that model 3 is significantly different from the models v4 and v5
+anova(v3,v4)
+anova(v3,v5)
+
+
+
+
+```
+
+(5 pts) On average, how do we expect UFFI will change the value of a property?
+```{r}
+
+#House with UFFI
+uffi1 <-subset(uffiF,UFFI==1)
+#Houses without UFFI
+uffi0 <-subset(uffiF,UFFI==0)
+
+#Mean of price for the housesd with UFFI
+mean(uffi1$price)
+
+#Mean of price for the houses without UFFI
+mean(uffi0$price)
+
+#Difference of means between houses with UFFI and houses without UFFI
+mean(uffi0$price) - mean(uffi1$price)
+
+#Like I stated before UFFI will definetely change the value of a property.
+
+
+
+```
+
+
+(5 pts) If the home in question is older than 45 years old, doesn't have a finished basement, has a lot area of 5000 square feet, has a brick exterior, 2 enclosed parking spaces, 1700 square feet of living space, central air, and no pool, what is its predicted value and what are the 95% confidence intervals of this home with UFFI and without UFFI?
+
+```{r}
+
+########PREDICTION OF THE PRICE WITHOUT A YEAR
+
+#House with UFFI
+ncase1<-data.frame( 1,1,1,0,5000,2,1700,1,0)
+col_names <- c("UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(ncase1) <- col_names
+
+#Model built to predict this house
+v4<-lm(price~ +UFFI +bsmnt  +pkspace +livingarea ,data=uffiF)
+summary(v4)
+
+#Prediction of the price for the house with UFFI
+saleUF1<- predict(v4,ncase1)
+
+#This would be the price for that given house with UFFI and no exact year
+saleUF1
+
+#Confidence Interval with UFFI
+saleUF1-1.96*17840
+
+saleUF1+1.96*17840
+
+#House without UFFI
+ncase0<-data.frame( 0,1,1,0,5000,2,1700,1,0)
+col_names <- c("UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(ncase0) <- col_names
+
+#Prediction of the price for the house with UFFI
+saleUF0<- predict(v4,ncase0)
+
+#This would be the price for that given house without UFFI and no exact year
+saleUF0
+
+
+#Confidence Interval without UFFI
+saleUF0-1.96*17840
+
+saleUF0+1.96*17840
+
+
+########PREDICTION OF THE PRICE WITH A RANGE OF TWO DIFFERENT YEARS THE HOUSE BEING SOLD
+
+#In this case I had to use another model that I built in the previous exercise because the best model from there did not take the presence of UFFI into account and I believe if we are asked the price difference of a house with and without UFFI a model that takes the UFFI into account is mandatory
+
+###Prediction for the year 2015
+
+ncase1<-data.frame( 2015,1,1,1,0,5000,2,1700,1,0)
+col_names <- c("year","UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(ncase1) <- col_names
+
+#Price prediction with UFFI
+s2015UF1<- predict(v5,ncase1)
+
+#Price of the house with UFFI and the year 2015 being sold
+s2015UF1
+
+#Confidence Interval with UFFI for the house being sold the year 2015
+s2015UF1-1.96*14880
+
+s2015UF1+1.96*14880
+
+#Price prediction without UFFI
+
+ncase1<-data.frame( 2015,0,1,1,0,5000,2,1700,1,0)
+col_names <- c("year","UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(ncase1) <- col_names
+
+s2015UF0<- predict(v5,ncase1)
+
+#Price of the house without UFFI and the year 2015 being sold
+s2015UF0
+
+#Confidence Interval without UFFI for the house being sold the year 2015
+s2015UF0-1.96*14880
+
+s2015UF0+1.96*14880
+
+###Prediction for the year 2016
+
+ncase1<-data.frame( 2016,1,1,1,0,5000,2,1700,1,0)
+col_names <- c("year","UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(ncase1) <- col_names
+
+#Price prediction with UFFI
+s2016UF1<- predict(v5,ncase1)
+
+#Price of the house with UFFI and the year 2016 being sold
+s2016UF1
+
+#Confidence Interval with UFFI for the house being sold the year 2016
+s2016UF1-1.96*14880
+
+s2016UF1+1.96*14880
+
+#Price prediction without UFFI
+
+ncase1<-data.frame( 2016,0,1,1,0,5000,2,1700,1,0)
+col_names <- c("year","UFFI","brick","45years","bsmnt","lotarea","pkspace","livingarea","air","pool")
+names(ncase1) <- col_names
+
+s2016UF0<- predict(v5,ncase1)
+
+#Price of the house without UFFI and the year 2016 being sold
+
+s2016UF0
+
+#Confidence Interval without UFFI for the house being sold the year 2016
+s2016UF0-1.96*14880
+
+s2016UF0+1.96*14880
+```
+(2 pts) If $215,000 was paid for this home, by how much, if any, did the client overpay, and how much compensation is justified due to overpayment?
+
+```{r}
+
+#House with UFFI
+Ovrpaid1<-215000 - saleUF1
+#The client overpaid the amount below
+Ovrpaid1
+
+#House without UFFI
+Ovrpaid2<-215000 - saleUF0
+#The client overpaid the amount below
+Ovrpaid2
+
+#House sold the year 2015 with UFFI
+Ovrpaid3<-215000  - s2015UF1
+#The client overpaid the amount below
+Ovrpaid3
+
+#House sold the year 2015 without UFFI
+Ovrpaid4<-215000  - s2015UF0
+#The client overpaid the amount below
+Ovrpaid4
+
+#House sold the year 2016 with UFFI
+Ovrpaid5<-215000  - s2016UF1
+#The client overpaid the amount below
+Ovrpaid5
+
+#House sold the year 2016 without UFFI
+Ovrpaid6<-215000  - s2016UF0
+#The client overpaid the amount below
+Ovrpaid6
+
+#These are the amounts of compensation that would eb justified due to overpayment
+Ovrpaid1 - Ovrpaid2
+
+Ovrpaid3 -Ovrpaid4
+
+Ovrpaid5 -Ovrpaid6
+```
+
+
+
+
+Problem 3
+(2 pts) Divide the provided Titanic Survival Data into two subsets: a training data set and a test data set. Use whatever strategy you believe it best. Justify your answer.
+
+```{r}
+library(dplyr)
+library(plyr)
+library(readr)
+titanic <- read.csv("D:/R_TEst/MAchine Learning 2017/Practicum2/titanic_data.csv")
+
+#Before splitting the dataset into two subset I have decided to get the data in working order first
+titanic1<-titanic
+#We check in NAs are present, and yes they are as it seems that the column Age has 177 NAs
+sapply(titanic1,function(x) sum(is.na(x)))
+
+#I convert the column sex to a 1-0 factor, being male 1 and female 0
+titanic1$Sex <- ifelse(titanic1$Sex == "male",1,0)
+
+#Then I procceed to convert the rest of the columns into factors
+titanic1$Pclass<-as.factor(titanic1$Pclass)
+titanic1$Parch<-as.factor(titanic1$Parch)
+titanic1$Parch<-as.factor(titanic1$Parch)
+titanic1$SibSp<-as.factor(titanic1$SibSp)
+#Apparently one column is just an empty space so I transform it into an NA
+titanic1$Embarked[titanic1$Embarked == ""] <- NA 
+
+#To simplify the missing value for the embarked column is imputed by the mode.
+mode <- function(x) {
+m1 <- unique(x)
+m1[which.max ( tabulate ( match(x, m1)))]
+}
+mode (titanic1$Embarked)
+titanic1$Embarked[is.na(titanic1$Embarked)] <- mode (titanic1$Embarked)
+titanic1$Embarked <- droplevels(titanic1$Embarked)
+
+
+#Now here where I have splitted the data into two subsets
+#I have decided to split it into two almost two equal halves, because so far that's the method we have been using and I have been using and it has worked decently, so I don't see a further reason not to split it this way.
+t_train1<-titanic1[1:446, ]
+t_test1<-titanic1[447:891, ]
+
+#The missing value for the age for both subsets is imputed with the mean
+t_train1$Age[is.na(t_train1$Age)] = mean(t_train1$Age, na.rm = TRUE)
+t_test1$Age[is.na(t_test1$Age)] = mean(t_test1$Age, na.rm = TRUE)
+
+#I build a data frame ready to be used with the regression and with its variables transformed into dummy codes
+t_train<-model.matrix(~ +Pclass +Sex +Age +SibSp +Parch +Fare +Embarked +Survived, data=t_train1)
+t_train<-as.data.frame(t_train)
+
+t_test<-model.matrix(~ +Pclass +Sex +Age +SibSp +Parch +Fare +Embarked +Survived, data=t_test1)
+t_test<-as.data.frame(t_test)
+
+
+```
+(5 pts) Construct a logistic regression model to predict the probability of a passenger surviving the Titanic accident. Test the statistical significance of all parameters and eliminate those that have a p-value < 0.05.
+
+```{r}
+
+#A rather straightforward regression model built with the help of the step function to eliminate or try to those variables witha  p-value less than < 0.05
+m1<-glm(Survived ~., data=t_train, family = "binomial")
+summary(m1)
+
+step(m1)
+
+m2<-glm(Survived ~ +Pclass2 +Pclass3 +Sex +Age +SibSp3 +SibSp5 +SibSp8 +EmbarkedQ, data=t_train,family = "binomial")
+summary(m2)
+step(m2)
+
+#This is the model that we will be using for the rest of the assignment
+m3<-glm(Survived ~ +Pclass2 +Pclass3 +Sex +Age +SibSp3  +EmbarkedQ, data=t_train,family = "binomial")
+summary(m3)
+
+
+```
+
+(2 pts) State the model as a regression equation.
+
+```{r}
+
+Req<- 1/(1+exp(-(m3$coefficient[[1]]+  
+                   m3$coefficient[[2]]*(t_train$Pclass2)+
+                   m3$coefficient[[3]]*(t_train$Pclass3)+
+                   m3$coefficient[[4]]*(t_train$Sex)+
+                   m3$coefficient[[5]]*(t_train$Age)+
+                   m3$coefficient[[6]]*(t_train$SibSp3)+
+                 m3$coefficient[[7]]*(t_train$EmbarkedQ))))
+
+#We test that both the equation and the model in r give the same results
+ppred<-predict(m3,t_train,type = 'response')
+ppred[1:5]
+Req[1:5]
+```
+
+
+
+(5 pts) Test the model against the test data set and determine its prediction accuracy (as a percentage correct).
+
+```{r}
+
+library(caret)
+ppred<-predict(m3,t_test,type = 'response')
+
+#This line is to see how many fail and pass there are in total
+table(t_test$Survived)
+
+
+#First method to see the accuracy fo the model although it doesn't give the accuracy in percentage in can be done
+#with a few basic comnmands
+pred.logit <- rep("0",length(ppred))
+pred.logit[ppred>=0.5] <- "1"
+v1<-confusionMatrix(t_test$Survived, pred.logit)
+v1
+overall <- v1$overall
+overall.accuracy <- overall['Accuracy'] 
+
+#The first method yields an accuracy of 78.8764 
+overall.accuracy*100
+
+#This second method yields the same accuracy of 78.8764
+mean (t_test$Survived == pred.logit)*100
+
+
+#We can see the same with the third method
+fitted.results <- predict(m3,t_test,type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != t_test$Survived)
+print(paste('Accuracy',1-misClasificError))
+
+
+
+#Adn exactly the same with the fourth one
+pred_cutoff <- ifelse(ppred>0.5,1,0)
+testset <- data.frame(t_test, pred_cutoff)
+# Construct a confusion matrix
+conf <-table(testset$Survived,pred_cutoff,dnn = c("Actual", "Predicted"))
+print(conf)
+
+TP <- conf[1, 1]  
+FN <- conf[1, 2]  
+FP <- conf[2,1]  
+TN <- conf[2,2] 
+
+# Calculate and print the accuracy: acc
+acc <- ((TP+TN)/(TP+FN+FP+TN))*100
+print(acc)
+
+
+```
+
+Problem 4
+(10 pts) Elaborate on the use of kNN and Naive Bayes for data imputation. Explain in reasonable detail how you would use these algorithms to impute missing data and why it can work.
+
+After some time working with the imputation for problem 1 I learnt a bit more about the topic
+For the most part the methods used for data imputation, or at least the ones that are used the most, are decision trees, imputation by mode and mean. The decision tree imputation is to be considered one of the best methods to impute missing data, but as it happens while working with data it's not a magic tool.
+
+When you impute data with a decision tree you create a model based on a given data and then predict the values for that given missing data just like we have done with every other model so far.
+
+Now why would it work using KNN or Naive Bayes? Simply because they are classying and predictive models and that not only are applied to new data or to a validation data set but also to missing values.
+
+For example KNN would work very well with all numerical data, and Naive Bayes would work very well with categorical (character filled) data.
+
+After working for a bit for the missing data of problem one, I would construct a model like we have done so far either for KNN and Naive Bayes, and then sue the model to predict the missing data and then impute it to those respective missing values.
+
+Now, a few things we would need to consider is the type of data we are working with and if those algorithms are the best choice for data imputation given that data. 
+Something I haven't consideres is that in order to check the accuracy of the model, because applying a model without knowing it's accurayc can be very risky, would be selecting the rows, or columns without missing values,
+split them into a training data set and vlaidation data set so we would be able to test the accuracy to see if the algorithm we have chosen is the best choice, and then afterwards use to impute the data on those missing values
+
+
+
+
+
+
+
+
+
+
+
+
+
+
