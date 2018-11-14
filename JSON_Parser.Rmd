@@ -1,0 +1,55 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(jsonlite)
+library(XML)
+
+ url <- "http://studycrafter.com/analytics/users//GamifiedSurveys/5DomainsofPlay/"
+ doc <- htmlParse(url)
+ links <- xpathSApply(doc, "//a/@href")
+ #free(doc)
+ links
+
+wanted <- links[grepl("*.json", links)]
+
+GetMe <- paste(url, wanted, sep = "")
+
+
+d1 = list()
+
+for(i in 1:length(GetMe))  
+{
+    assign(paste("a", i, sep = ""), GetMe[i])
+    Object = get(paste0("a", i))
+
+       assign(paste("v", i, sep = ""),fromJSON( Object) )
+
+       Object1 = get(paste0("v", i))
+        assign(paste("b", i, sep = ""),rbind.data.frame(Object1[["variable_values"]][["value"]]))
+
+        Object2 = get(paste0("b", i))
+        cols <- Object1[["variable_values"]][["name"]]
+        colnames(Object2) <- cols
+    
+        if ( length(Object2)== 77)
+        {
+        
+        d1[[i]] <- Object2
+        }
+        else
+        {
+          
+          print(paste0("No funciona", length(Object2)))
+          
+        }
+}
+
+d1 = do.call(rbind, d1)
+
+
+
+```
+
